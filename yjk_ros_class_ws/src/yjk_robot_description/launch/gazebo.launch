@@ -1,0 +1,18 @@
+<launch>
+  <!-- 启动Gazebo空世界 - 老师PPT原版 -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="paused" value="false"/>
+    <arg name="use_sim_time" value="true"/>
+    <arg name="gui" value="true"/>
+  </include>
+
+  <!-- 加载 XACRO 格式（只改了这一行！） -->
+  <param name="robot_description" command="$(find xacro)/xacro $(find yjk_robot_description)/urdf/simple_robot.xacro" />
+
+  <!-- 机器人状态发布 - 老师必加节点 -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+  <!-- 生成小车 - 老师launch内的原生方式，非手动spawn -->
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model"
+        args="-param robot_description -urdf -model simple_robot -x 0 -y 0 -z 0.1" />
+</launch>

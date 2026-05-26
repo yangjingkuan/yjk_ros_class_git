@@ -1,0 +1,10 @@
+/.vscode/*
+/.idea/*
+/devel/*
+/build/*
+/src/.vscode/*
+.catkin_workspace
+/src/upros_navigation/maps/my_lab.yaml
+/src/upros_navigation/maps/my_lab.pgm
+/src/CMakeLists.txt
+src/upros_chat/scriptsgenerated.wav

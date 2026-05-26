@@ -1,0 +1,11 @@
+<launch>
+    <arg name="imu_type" default="b9" doc="imu_type [a9, b9, b6]" />
+
+    <node pkg="zoo_imu" type="imu_driver_node" name="imu" output="screen">
+        <param name="port" type="str" value="/dev/imu" />
+        <param name="gra_normalization" type="bool" value="True" if="$(eval imu_type == 'a9')" />
+    </node>
+
+    <node pkg="zoo_imu" type="imu_calibrate" name="imu_calibrate" output="screen">
+    </node>
+</launch>

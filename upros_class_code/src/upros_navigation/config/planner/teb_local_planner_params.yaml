@@ -1,0 +1,143 @@
+# TEB 局部路径规划器参数
+# 底盘：W2A 差速两轮  轮距 21.5 cm  车体 30x29 cm
+# 调参优先级（★越多越常调）：速度限制★★★ > 障碍物★★★ > 到达判定★★ > 优化权重★ > 拓扑/恢复★
+TebLocalPlannerROS:
+
+  # TF 时间容差：lidar_loc 以扫描时刻发布 TF，比 ros::Time::now() 滞后约 30-100ms
+  # 此参数是 TEB 自身的容差（独立于 costmap 的 transform_tolerance），必须 >= costmap 值
+  transform_tolerance: 1.0
+
+
+  # ══════════════════════════════════════════════════════
+  # 速度 / 加速度限制  ★★★ 最常调
+  # ══════════════════════════════════════════════════════
+  max_vel_x: 0.65          # 最大前进速度 (m/s)。调大→走更快；过大会甩尾/超调
+  max_vel_y: 0.0            # 差速车必须为 0（只能前后+转向，不能横移）
+  max_vel_x_backwards: 0.35 # 最大倒退速度 (m/s)。通常与 max_vel_x 相同或更小
+  max_vel_theta: 1.5        # 最大转向角速度 (rad/s)。调大→转弯更快；过大会原地甩头
+  max_trans_vel: 0.75
+  max_rot_vel: 1.5
+  
+  acc_lim_x: 1.1            # 线加速度上限 (m/s²)。调大→启停响应更快，减少卡顿感
+  acc_lim_y: 0.0            # 差速车必须为 0
+  acc_lim_theta: 0.9        # 角加速度上限 (rad/s²)。调小→转向更平滑
+
+  # ══════════════════════════════════════════════════════
+  # 底盘类型（阿克曼参数，差速车全部为 0）
+  # ══════════════════════════════════════════════════════
+  min_turning_radius: 0.0       # 差速车为 0（可原地旋转）
+  wheelbase: 0.0                # 轴距，差速车为 0
+  cmd_angle_instead_rotvel: False
+
+  # ══════════════════════════════════════════════════════
+  # 机器人外形（碰撞检测用）
+  # 顶点顺序：左后→左前→右前→右后（逆时针）
+  # ══════════════════════════════════════════════════════
+  footprint_model:
+    type: polygon
+    vertices: [[-0.18, -0.145], [-0.18, 0.145], [0.18, 0.145], [0.18, -0.145]]
+
+  odom_topic: odom  # zoo_driver 发布的里程计话题（注意：话题名 odom，坐标系 odom_combined）
+  map_frame: map    # TF 全局参考系，必须与 global_costmap 的 global_frame 一致
+
+  # ══════════════════════════════════════════════════════
+  # 障碍物  ★★★ 最常调
+  # ══════════════════════════════════════════════════════
+  min_obstacle_dist: 0.05       # 与障碍物保持的最小距离 (m)
+                                 # 调大→更安全但走廊可能通不过；调小→更激进容易擦边
+  include_costmap_obstacles: False        # 将代价地图中的障碍物纳入规划
+  costmap_obstacles_behind_robot_dist: 1.5  # 只考虑机器人后方多远内的障碍物 (m)
+  obstacle_poses_affected: 5   # 受障碍物影响的轨迹姿态数量（0~30），越大越保守
+
+  costmap_converter_plugin: "costmap_converter::CostmapToPolygonsDBSMCCH"
+  costmap_converter_spin_thread: True   # 独立线程，不阻塞主规划
+  costmap_converter_rate: 3             # 3Hz 足够低速场景
+
+  include_dynamic_obstacles: True        # 启用动态障碍物预测
+  dynamic_obstacle_inflation_dist: 0.5   # 动态障碍物膨胀半径 (m)
+
+  # ══════════════════════════════════════════════════════
+  # 到达判定  ★★
+  # ══════════════════════════════════════════════════════
+  xy_goal_tolerance: 0.2   # 位置到达容差 (m)。调小→停得更准；过小可能反复抖动到不了
+  yaw_goal_tolerance: 0.1  # 朝向到达容差 (rad ≈ 5.7°)。调小→最终朝向更准
+  free_goal_vel: False      # False→到达时减速停止；True→冲到目标不减速（危险）
+
+  # ══════════════════════════════════════════════════════
+  # 轨迹时域配置
+  # ══════════════════════════════════════════════════════
+  teb_autosize: True        # 自动调整轨迹段数，保持 dt_ref 附近的时间分辨率
+  dt_ref: 0.35              # 相邻轨迹点目标时间间隔 (s)（0.30 路径质量下降，0.45 计算过重）
+  dt_hysteresis: 0.08       # dt 允许浮动范围 (s)，取 dt_ref 的约 10%
+  global_plan_overwrite_orientation: False  # False→保留全局规划的方向信息
+  max_global_plan_lookahead_dist: 3.5       # 局部规划最多向前看多远的全局路径 (m)
+  feasibility_check_no_poses: 2            # 检查前 N 个轨迹点是否可行（减少→计算更快，减少误判停车）
+
+  # ══════════════════════════════════════════════════════
+  # 优化权重  ★  （一般不用动，除非走路风格需要大改）
+  # 所有 weight_* 越大该项约束越严格；调 0 则关闭该约束
+  # ══════════════════════════════════════════════════════
+  no_inner_iterations: 2    # 每次外层迭代内的优化步数（减少→计算更快）
+  no_outer_iterations: 3    # 外层迭代次数（保持3，配合 no_inner=2 平衡质量与速度）
+  optimization_activate: True
+  optimization_verbose: False
+
+  penalty_epsilon: 0.1      # 软约束惩罚区宽度，值越小约束越硬
+  obstacle_cost_exponent: 4 # 障碍物代价指数，越大越排斥障碍物附近区域
+
+  weight_max_vel_x: 3          # 尽量跑满最大速度的权重
+  weight_max_vel_theta: 1      # 尽量跑满最大角速度的权重
+  weight_acc_lim_x: 1          # 惩罚超出线加速度限制
+  weight_acc_lim_theta: 1      # 惩罚超出角加速度限制
+  weight_kinematics_nh: 1000   # 非完整约束（差速车不能横移），必须很大
+  weight_kinematics_forward_drive: 3   # 惩罚倒退，调大→更倾向向前走
+  weight_kinematics_turning_radius: 1  # 最小转弯半径约束（差速车为 0 时无效）
+  weight_optimaltime: 1.5        # 时间最优权重，调大→走更快（注意必须 > 0）
+  weight_shortest_path: 0      # 路径最短权重，0=不启用；与 optimaltime 二选一
+  weight_obstacle: 80         # 避障权重，调大→离障碍物更远（路径可能更绕）
+  weight_inflation: 0.2        # 代价地图膨胀层权重，影响与膨胀区的距离
+  weight_dynamic_obstacle: 10          # 动态障碍物避让权重
+  weight_dynamic_obstacle_inflation: 0.2
+  weight_viapoint: 1           # 途经点跟随权重
+  weight_adapt_factor: 2       # 自适应权重缩放因子
+
+  # ══════════════════════════════════════════════════════
+  # 多拓扑并行规划（Homotopy Class Planning）
+  # 启用后 TEB 同时搜索多条绕障方案，选最优的执行
+  # ══════════════════════════════════════════════════════
+  enable_homotopy_class_planning: False   # 多拓扑并行搜索，同时评估多条绕障路径选最优；5Hz 下 CPU 足够
+  enable_multithreading: True            # 多线程计算各拓扑候选
+  max_number_classes: 3                  # 最多同时评估几条候选路径
+  selection_cost_hysteresis: 1.0        # 切换候选路径的代价迟滞系数，避免频繁换路
+  selection_prefer_initial_plan: 0.95   # 倾向保持当前路径（防抖动），0~1
+  selection_obst_cost_scale: 1.0
+  selection_alternative_time_cost: False
+  roadmap_graph_no_samples: 15           # 随机路图采样点数
+  roadmap_graph_area_width: 5
+  roadmap_graph_area_length_scale: 1.0
+  h_signature_prescaler: 0.5
+  h_signature_threshold: 0.1
+  obstacle_heading_threshold: 0.45
+  switching_blocking_period: 0.0
+  viapoints_all_candidates: True
+  delete_detours_backwards: True
+  max_ratio_detours_duration_best_duration: 3.0
+  visualize_hc_graph: False
+  visualize_with_time_as_z_axis_scale: False
+
+  # ══════════════════════════════════════════════════════
+  # 恢复行为（TEB 内部）
+  # ══════════════════════════════════════════════════════
+  shrink_horizon_backup: True       # 规划失败时临时缩短时域尝试脱困
+  shrink_horizon_min_duration: 10   # 缩短时域持续的最少迭代次数
+  oscillation_recovery: False       # 振荡检测与恢复（开启可能误判，关闭更稳定）
+  oscillation_v_eps: 0.1
+  oscillation_omega_eps: 0.1
+  oscillation_recovery_min_duration: 10
+  oscillation_filter_duration: 10
+
+# costmap_converter 插件参数（与 TebLocalPlannerROS 同级，move_base 命名空间下）
+costmap_converter/CostmapToPolygonsDBSMCCH:
+  cluster_max_distance: 0.25   # 0.2m 内的栅格聚合为一个障碍物多边形
+  min_pts: 3                  # 至少 3 个栅格才算一个障碍物（过滤噪点）
+  max_pts: 50                 # 最多 50 个点，防止复杂多边形拖慢计算
